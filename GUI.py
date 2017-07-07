@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
+from tkinter.scrolledtext import ScrolledText
 from typing import Text
 import shutil
 import os
@@ -25,7 +26,7 @@ class GUI(Frame):
 
         # Toolbar
         gui_toolbar_frame = ttk.Frame(parent, padding="5 5 5 5")
-        gui_toolbar_frame.grid(row=0, column=0, sticky=(E, N, W))
+        gui_toolbar_frame.pack(fill="both", expand=True)
 
         gui_load_file_button = ttk.Button(gui_toolbar_frame, text="Select file", command=self.select_file)
         gui_load_file_button.grid(row=0, column=0, sticky=(E, W))
@@ -39,7 +40,9 @@ class GUI(Frame):
 
         # content
         gui_main_frame = ttk.Frame(parent, padding="5 5 5 5")
-        gui_main_frame.grid(row=1, column=0, sticky=(E, W, N, S))
+        gui_main_frame.grid_rowconfigure(0, weight=1)
+        gui_main_frame.grid_columnconfigure(0, weight=1)
+        gui_main_frame.pack(fill="both", expand=True)
 
         gui_tabs = ttk.Notebook(gui_main_frame)
         gui_tabs.grid(sticky=(N, E, S, W))
@@ -51,10 +54,9 @@ class GUI(Frame):
 
         # status
         gui_status_frame = ttk.Frame(parent, relief="sunken", padding="2 2 2 2")
-        gui_status_frame.grid(row=2, column=0, sticky=(E, W, S))
-        self.gui_status_msg = StringVar(value="Please select a file")
-        gui_status = ttk.Label(gui_status_frame, textvariable=self.gui_status_msg, anchor=W)
-        gui_status.grid(row=0, column=0, sticky=(E, W))
+        gui_status_frame.pack(fill="both", expand=True)
+        self.gui_status = ScrolledText(gui_status_frame, state='disabled', width=40, height=5, wrap='none')
+        self.gui_status.pack(expand=True, fill="both")
 
         for button in self.locked_buttons:
             button.state(["disabled"])
@@ -115,12 +117,12 @@ class GUI(Frame):
 
         gui_northbeacon_button = ttk.Button(gui_basic_tools_frame, text="Create north pole beacon",
                                             command=self.create_north_beacon)
-        gui_northbeacon_button.grid(sticky=(E, W))
+        gui_northbeacon_button.grid(row=0, column=1, sticky=(E, W))
         self.locked_buttons.append(gui_northbeacon_button)
 
         gui_southbeacon_button = ttk.Button(gui_basic_tools_frame, text="Create GPS beacons",
                                             command=self.create_gps_beacons)
-        gui_southbeacon_button.grid(sticky=(E, W))
+        gui_southbeacon_button.grid(row=1, column=1, sticky=(E, W))
         self.locked_buttons.append(gui_southbeacon_button)
         return gui_basic_tools_frame
 
@@ -170,7 +172,10 @@ class GUI(Frame):
             self.update_statustext("Player teleported")
 
     def update_statustext(self, message: str):
-        self.gui_status_msg.set(message)
+        self.gui_status.config(state=NORMAL)
+        self.gui_status.insert(END, message + "\n")
+        self.gui_status.see(END)
+        self.gui_status.config(state=DISABLED)
 
     def select_file(self):
         """
@@ -199,7 +204,7 @@ class GUI(Frame):
 
         self.savegame = Savegame.Savegame()
         self.savegame.load(self.current_file)
-        self.gui_status_msg.set("Loaded game '{}'".format(self.savegame.get_name()))
+        self.update_statustext("Loaded game '{}'".format(self.savegame.get_name()))
 
         # Enable some buttons once a file is loaded
         for button in self.locked_buttons:
