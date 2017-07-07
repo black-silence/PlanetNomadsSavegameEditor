@@ -6,10 +6,10 @@ from typing import Text
 import shutil
 import os
 from PlanetNomads import Savegame
+import platform
 
 """
 TODO
-* save basedir so user doesn't have to find it every time
 """
 
 
@@ -177,7 +177,14 @@ class GUI(Frame):
         Show file select dialog
         :return: None
         """
-        opts = {"filetypes": [("PN save files", ".db"), ("All files", ".*")]}
+        opts = {"filetypes": [("PN save files", "save_*.db"), ("All files", ".*")]}
+        os_name = platform.system()
+        if os_name == "Linux":
+            opts["initialdir"] = os.path.expanduser("~/.config/unity3d/Craneballs/PlanetNomads/")
+        elif os_name == "Windows":
+            opts["initialdir"] = os.path.expanduser("~\AppData\LocalLow\Craneballs\PlanetNomads")
+        # TODO MAC > USERS > [Your Username] > Library > Application Support > unity.Craneballs.PlanetNomads
+
         filename = filedialog.askopenfilename(**opts)
         if not filename:
             return
