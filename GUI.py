@@ -22,7 +22,7 @@ class GUI(Frame):
     def __init__(self, parent):
         Frame.__init__(self, parent)
         self.parent = parent
-        parent.title("Planet Nomads Savegame Editor 1.0.0")
+        parent.title("Planet Nomads Savegame Editor 1.0.1")
 
         # Toolbar
         gui_toolbar_frame = ttk.Frame(parent, padding="5 5 5 5")
@@ -150,14 +150,18 @@ class GUI(Frame):
         gui_resource_menu.add_command(label="Silicium", command=lambda: self.create_item(52))
         gui_resource_menu.add_command(label="Silver", command=lambda: self.create_item(59))
         gui_resource_menu.add_command(label="Titanium", command=lambda: self.create_item(57))
-        gui_resource_menubutton = ttk.Menubutton(gui_cheats_frame, text="Cheat: add resource", menu=gui_resource_menu)
+        gui_resource_menubutton = ttk.Menubutton(gui_cheats_frame, text="Cheat: add stack of resource",
+                                                 menu=gui_resource_menu)
         gui_resource_menubutton.grid(sticky=(E, W))
         self.locked_buttons.append(gui_resource_menubutton)
 
         gui_item_menu = Menu(gui_cheats_frame, tearoff=0)
+        gui_item_menu.add_command(label="Basic Frame", command=lambda: self.create_item(69))
         gui_item_menu.add_command(label="Composite 1", command=lambda: self.create_item(78))
         gui_item_menu.add_command(label="Mechanical 1", command=lambda: self.create_item(76))
-        gui_item_menubutton = ttk.Menubutton(gui_cheats_frame, text="Cheat: add item", menu=gui_item_menu)
+        gui_item_menu.add_command(label="Plating", command=lambda: self.create_item(67))
+        gui_item_menu.add_command(label="Standard Electronics", command=lambda: self.create_item(73))
+        gui_item_menubutton = ttk.Menubutton(gui_cheats_frame, text="Cheat: add stack of item", menu=gui_item_menu)
         gui_item_menubutton.grid(sticky=(E, W))
         self.locked_buttons.append(gui_item_menubutton)
 
