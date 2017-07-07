@@ -85,7 +85,7 @@ class GUI(Frame):
         menu.add_command(label="Select machine")
 
         for m in machines:
-            menu.add_command(label=m.get_name_or_id(),
+            menu.add_command(label="{} {}".format(m.get_type(), m.get_name_or_id()),
                              command=lambda value=m.identifier: self.gui_selected_machine_identifier.set(value))
         self.gui_selected_machine_identifier.set("Select machine")
 

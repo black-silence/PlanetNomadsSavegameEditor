@@ -424,6 +424,11 @@ class Machine:
             return n
         return self.identifier
 
+    def get_type(self):
+        if self.is_grounded():
+            return "Building"
+        return "Vehicle"
+
     def get_name(self):
         if self.name is not None:
             return self.name
