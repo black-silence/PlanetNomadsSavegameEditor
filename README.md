@@ -7,7 +7,7 @@ Disclaimer:
 - Use the backup button, Planet Nomads is an early access game and may change so bad things can happen when PNSE is not adjusted to changes.
 
 Requirements:
-- python
+- Python 3.5 or later
 
 Usage:
 - run GUI.py
