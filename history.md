@@ -9,3 +9,7 @@ v1.0.1
 - better initial directory for file open dialog
 - better machine selector
 - minor UI changes
+
+v1.0.2
+- updated to work with PN 0.7.8
+- added map drawing

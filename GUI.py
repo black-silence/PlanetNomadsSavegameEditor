@@ -9,6 +9,14 @@ import os
 from PlanetNomads import Savegame
 import platform
 
+try:
+    from mpl_toolkits.mplot3d import Axes3D  # Required for projection='3d'
+    import matplotlib.pyplot as plt
+    import numpy as np
+    enable_map = True
+except ImportError:
+    enable_map = False
+
 """
 TODO
 """
@@ -47,16 +55,17 @@ class GUI(Frame):
         gui_tabs = ttk.Notebook(gui_main_frame)
         gui_tabs.grid(sticky=(N, E, S, W))
 
-        gui_tabs.add(self.init_basic_buttons(gui_main_frame), text="Basic tools")
-        gui_tabs.add(self.init_machine_buttons(gui_main_frame), text="Machine tools")
-        gui_tabs.add(self.init_cheat_buttons(gui_main_frame), text="Cheats")
-        gui_tabs.add(self.init_dev_buttons(gui_main_frame), text="Dev tools")
-
         # status
         gui_status_frame = ttk.Frame(parent, relief="sunken", padding="2 2 2 2")
         gui_status_frame.pack(fill="both", expand=True)
         self.gui_status = ScrolledText(gui_status_frame, state='disabled', width=40, height=5, wrap='none')
         self.gui_status.pack(expand=True, fill="both")
+
+        # Tabs after status bar to enable message display
+        gui_tabs.add(self.init_basic_buttons(gui_main_frame), text="Basic tools")
+        gui_tabs.add(self.init_machine_buttons(gui_main_frame), text="Machine tools")
+        gui_tabs.add(self.init_cheat_buttons(gui_main_frame), text="Cheats")
+        gui_tabs.add(self.init_dev_buttons(gui_main_frame), text="Dev tools")
 
         for button in self.locked_buttons:
             button.state(["disabled"])
@@ -85,6 +94,8 @@ class GUI(Frame):
         menu.add_command(label="Select machine")
 
         for m in machines:
+            if m.get_type() == "Construct":
+                continue  # 300+ wrecks are just too much
             menu.add_command(label="{} {}".format(m.get_type(), m.get_name_or_id()),
                              command=lambda value=m.identifier: self.gui_selected_machine_identifier.set(value))
         self.gui_selected_machine_identifier.set("Select machine")
@@ -110,6 +121,13 @@ class GUI(Frame):
 
     def init_basic_buttons(self, gui_main_frame):
         gui_basic_tools_frame = ttk.Frame(gui_main_frame)
+
+        if enable_map:
+            gui_draw_map_button = ttk.Button(gui_basic_tools_frame, text="Draw map", command=self.draw_map)
+            gui_draw_map_button.grid(sticky=(E, W))
+            self.locked_buttons.append(gui_draw_map_button)
+        else:
+            self.update_statustext("Install numpy + matplotlib to enable the map!")
 
         gui_unlock_button = ttk.Button(gui_basic_tools_frame, text="Unlock all recipes", command=self.unlock_recipes)
         gui_unlock_button.grid(sticky=(E, W))
@@ -172,7 +190,7 @@ class GUI(Frame):
         return gui_cheats_frame
 
     def teleport_northpole(self):
-        if self.savegame.teleport_player(0, 16250, 0):
+        if self.savegame.teleport_player(0, self.savegame.get_planet_size() + 250, 0):
             self.update_statustext("Player teleported")
 
     def update_statustext(self, message: str):
@@ -294,6 +312,44 @@ class GUI(Frame):
         self.create_item(118, 1)
         self.create_item(114, 1)
         self.create_item(110, 1)
+
+    def draw_map(self):
+        # Based on https://stackoverflow.com/questions/11140163/python-matplotlib-plotting-a-3d-cube-a-sphere-and-a-vector
+        plt.style.use('seaborn-whitegrid')
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
+        ax.set_aspect("equal")
+
+        # Draw a sphere to mimic a planet
+        u = np.linspace(0, 2 * np.pi, 100)
+        v = np.linspace(0, np.pi, 100)
+        x = self.savegame.get_planet_size() * np.outer(np.cos(u), np.sin(v))
+        y = self.savegame.get_planet_size() * np.outer(np.sin(u), np.sin(v))
+        z = self.savegame.get_planet_size() * np.outer(np.ones(np.size(u)), np.cos(v))
+        ax.plot_surface(x, y, z, rcount=18, ccount=21, alpha=0.1)
+
+        colors = {"Base": "blue", "Vehicle": "orange", "Construct": "grey"}
+        markers = {"Base": "^", "Vehicle": "v", "Construct": "."}
+        machines = self.savegame.machines
+        coords = {}
+        for m in machines:
+            c = m.get_coordinates()
+            type = m.get_type()
+            if not type in coords:
+                coords[type] = {"x": [], "y": [], "z": []}
+            coords[type]["x"].append(c[0])
+            coords[type]["y"].append(c[2])  # Flip y/z
+            coords[type]["z"].append(c[1])
+        for type in coords:
+            ax.scatter(np.array(coords[type]["x"]), np.array(coords[type]["y"]), np.array(coords[type]["z"]),
+                   c=colors[type], marker=markers[type], label=type)
+
+        player = self.savegame.get_player_position()
+        ax.scatter(np.array(player[0]), np.array(player[2]), np.array(player[1]), c="red", marker="*", label="Player")
+
+        ax.grid(False)  # Hide grid lines
+        ax.legend()
+        plt.show()
 
 
 if __name__ == "__main__":

@@ -53,6 +53,17 @@ class Savegame:
         self.dbconnector.commit()
         return True
 
+    def get_player_position(self):
+        self.db.execute("select value from simple_storage where key = 'playerData'")
+        player_data = self.db.fetchone()["value"]
+        lines = player_data.split("\n")
+        for key, line in enumerate(lines):
+            if line.startswith("PL"):
+                continue
+            current_position = line.split(" ")
+            return [float(x) for x in line.split(" ")[:3]]
+        raise IOError("Player data not found in simple_storage")
+
     @property
     def machines(self):
         if not self.__machines:
@@ -89,6 +100,9 @@ class Savegame:
         print('Name: {}'.format(self.get_name()))
         print("Number of machines: {}".format(len(self.machines)))
 
+    def get_planet_size(self):
+        return 10000  # TODO detect planet size
+
     def get_player_inventory(self):
         inventory = Container(self.db, self.dbconnector)
         if not inventory.load(0):
@@ -97,41 +111,56 @@ class Savegame:
 
     def create_north_pole_beacon(self):
         """Create a solar beacon with navigation C on at the north pole."""
-        self.create_beacon(0, 16000, 0)
+        self.create_beacon(0, self.get_planet_size(), 0)
 
     def create_south_pole_beacon(self):
         """Create a solar beacon with navigation C on at the south pole."""
-        self.create_beacon(0, -16000, 0, rot_z=-180)
+        self.create_beacon(0, -1 * self.get_planet_size(), 0, rot_z=-180)
 
     def create_gps_beacons(self):
-        self.create_beacon(0, 16000, 0)  # North pole
-        self.create_beacon(16000, 0, 0, rot_z=90)
-        self.create_beacon(0, 0, 16000, rot_z=90)
+        self.create_beacon(0, self.get_planet_size(), 0)  # North pole
+        self.create_beacon(self.get_planet_size(), 0, 0, rot_z=90)
+        self.create_beacon(0, 0, self.get_planet_size(), rot_z=90)
 
     def create_beacon(self, x, y, z, rot_x=0, rot_y=0, rot_z=0):
-        xml = '<?xml version="1.0" encoding="utf-8"?>\n<Data blockName="">\n<Module id="0" TurnState="1" />\n' \
-              '<Module id="1" />\n' \
-              '<Module id="2" SavedBasePositionX="{:0.0f}" SavedBasePositionY="{:0.0f}" SavedBasePositionZ="{:0.0f}" />\n' \
-              '<Module id="3" PowerState="0"/>\n<Module id="4" TurnState="0"/>\n<Module id="5"/>\n<Module id="6"/>\n' \
-              '<Module id="7" />\n<Module id="8" Icon="2" TurnState="1" />\n</Data>\n'.format(x, y, z)
-        sql = "INSERT INTO active_blocks (id, type_id, data, container_id) VALUES (NULL, 56, ?, -1)"
-        self.db.execute(sql, (xml,))
-        active_id = self.db.lastrowid
+        self.db.execute("select max(id) as mx from active_blocks")
+        next_active_id = int(self.db.fetchone()["mx"]) + 1
+
+        xml = '<ActiveBlock xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' \
+              'xmlns:xsd="http://www.w3.org/2001/XMLSchema" ID="{}" Type_ID="56" Container_ID="-1" Name="">' \
+              '<Module ID="0" Type="SwitchModule"><Prop key="TurnState"><value xsi:type="xsd:int">1</value></Prop></Module>' \
+              '<Module ID="1" Type="PowerIn" />' \
+              '<Module ID="2" Type="PositionModule"><Prop key="BasePosition"><value xsi:type="xsd:string">{:0.0f};{:0.0f};{:0.0f}</value></Prop></Module>' \
+              '<Module ID="3" Type="PowerOut"><Prop key="PowerState"><value xsi:type="xsd:int">0</value></Prop></Module>' \
+              '<Module ID="4" Type="SwitchModule"><Prop key="TurnState"><value xsi:type="xsd:int">0</value></Prop></Module>' \
+              '<Module ID="5" Type="SensorModule" />' \
+              '<Module ID="6" Type="RenameModule" />' \
+              '<Module ID="7" Type="ConnectPowerInOutModule" />' \
+              '<Module ID="8" Type="NavigationModule"><Prop key="Icon"><value xsi:type="xsd:int">2</value></Prop><Prop key="TurnState"><value xsi:type="xsd:int">1</value></Prop></Module>' \
+              '</ActiveBlock>'.format(next_active_id, x, y, z)
+
+        sql = "INSERT INTO active_blocks (id, type_id, data, container_id) VALUES (?, 56, ?, -1)"
+        self.db.execute(sql, (next_active_id, xml))
 
         sql = 'INSERT INTO machine (id, data, transform) VALUES (?, ?, ' \
               '"{:0.0f} {:0.0f} {:0.0f} {:0.0f} {:0.0f} {:0.0f}")'.format(x, y, z, rot_x, rot_y, rot_z)
         machine_id = random.Random().randint(1000000, 10000000)  # Is there a system behind the ID?
-        xml = '<?xml version="1.0" encoding="utf-8"?>\n<Machine>\n' \
-              '<Grid gridId="{}">\n' \
-              '<Block ID="56" x="0" y="0" z="0" rotation="0" r="0" g="0" b="0" health="80" weld="80" grounded="True" ' \
-              'activeId="{}" />\n' \
-              '</Grid>\n</Machine>\n'.format(machine_id, active_id)
+        xml = '<?xml version="1.0" encoding="utf-8"?>\n' \
+              '<MachineSaveData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n' \
+              '<Grid ID="{}">\n' \
+              '<BasePosition X="{:0.0f}" Y="{:0.0f}" Z="{:0.0f}" />' \
+              '<BaseRotation X="{:0.0f}" Y="{:0.0f}" Z="{:0.0f}" />' \
+              '<Blocks>\n' \
+              '<Block ID="56" Health="80" Weld="80" Ground="true" ActiveID="{}">' \
+              '<Pos x="0" y="0" z="0" /><Rot v="0" /><Col r="0" g="0" b="0" />' \
+              '</Block>\n' \
+              '</Blocks>\n</Grid>\n</MachineSaveData>\n'.format(machine_id, x, y, z, rot_x, rot_y, rot_z, next_active_id)
         self.db.execute(sql, (machine_id, xml))
 
         # Solar beacon is self powered
         sql = 'INSERT INTO activeblocks_connector_power (block_id_1, module_id_1, block_id_2, module_id_2, power) ' \
               'VALUES (?, 3, ?, 1, 20)'
-        self.db.execute(sql, (active_id, active_id))
+        self.db.execute(sql, (next_active_id, next_active_id))
 
         # No idea what this does
         sql = 'INSERT INTO machine_rtree_rowid (rowid, nodeno) VALUES (?, 1)'
@@ -295,8 +324,8 @@ class Item:
         77: "SuperAlloy Mechanical",
         78: "Composite Parts",
         79: "Advanced Composite Parts",
-        80: "Fabric",
-        81: "Super Fabric",
+        80: "Fabric Mk1",
+        81: "Fabric Mk2",
         82: "ALM",
         83: "Advanced ALM",
         84: "Super ALM",
@@ -351,11 +380,12 @@ class Machine:
         self.active_block_ids = []
         self.db = db
         self.name = None
+        self.type = None
 
         root = ETree.fromstring(self.xml)
         for node in root:
             if node.tag == "Grid":
-                self.grid.append(Grid(node, self))
+                self.grid.append(Grid(node))
             else:
                 raise IOError("Unexpected element %s in machine" % node.tag)
 
@@ -396,7 +426,7 @@ class Machine:
         )
 
     def is_grounded(self):
-        for g in self.grids:
+        for g in self.grids:  # TODO only 1 grid per machine now
             if g.is_grounded():
                 return True
         return False
@@ -404,10 +434,11 @@ class Machine:
     def push_up(self, distance: int):
         """Push machine away from the planet center."""
         (x, y, z, rotX, rotY, rotZ) = [x for x in self.transform.split(" ")]
-        (x, y, z) = [float(i) for i in (x, y, z)]
+
+        (x, y, z) = self.get_coordinates()
         distance_to_planet_center = sqrt(x ** 2 + y ** 2 + z ** 2)
         factor = 1 + distance / distance_to_planet_center
-        x2 = x * factor
+        x2 = x * factor  # TODO use np
         y2 = y * factor
         z2 = z * factor
         self.transform = "{:0.3f} {:0.3f} {:0.3f} {} {} {}".format(x2, y2, z2, rotX, rotY, rotZ)
@@ -418,6 +449,11 @@ class Machine:
             g.move_by(difference)
         self.changed = True
 
+    def get_coordinates(self):
+        """Get coords as tuple of x, y, z"""
+        (x, y, z, rotX, rotY, rotZ) = [x for x in self.transform.split(" ")]
+        return [float(i) for i in (x, y, z)]
+
     def get_name_or_id(self):
         n = self.get_name()
         if n:
@@ -425,117 +461,272 @@ class Machine:
         return self.identifier
 
     def get_type(self):
-        if self.is_grounded():
-            return "Building"
-        return "Vehicle"
+        if self.type:
+            return self.type
+        self.type = "Construct"
+        if not self.is_grounded():
+            if self.has_cockpit():
+                self.type = "Vehicle"
+                return "Vehicle"
+            # If it has no cockpit it's random scattered blocks
+            return "Construct"
+        if self.has_generator():
+            self.type = "Base"
+            return "Base"
+        return "Construct"
 
     def get_name(self):
         if self.name is not None:
             return self.name
         for g in self.grids:
-            name = g.get_name()
+            name = g.get_name(self.active_block_data)
             if name:
                 self.name = name
                 return name
         self.name = ""
         return ""
 
+    def has_cockpit(self):
+        return self.grids[0].has_cockpit()
 
-class Structure:
-    """Grids contain blocks. Blocks may contain grids. Structure is a logic base for both."""
+    def has_generator(self):
+        return self.grids[0].has_generator()
 
-    def __init__(self, node, machine):
-        self._children = []
+
+class XmlNode:
+    """Basic XML node"""
+    def __init__(self, node):
+        self.type = node.tag
         self._attribs = OrderedDict()
-        self.machine = machine
-        for item in node:
-            if item.tag == "Grid":
-                self._children.append(Grid(item, machine))
-            elif item.tag == "Block":
-                self._children.append(Block(item, machine))
-            else:
-                raise IOError("Unexpected element %s in structure" % item.tag)
-        # Make sure no attribute is lost from the original xml
+        self._children = []
         for a in node.attrib:
             self._attribs[a] = node.attrib[a]
+        expected_children = self.get_expected_children_types()
+        for item in node:
+            if item.tag in expected_children:
+                self._children.append(globals()[item.tag](item))  # Create object from class name
+            else:
+                print("Unexpected children type %s" % item.tag)
 
     def get_attribs(self):
         """Get attributes in the original order, much easier to diff xml this way"""
         return self._attribs
 
-    def move_by(self, vector):
-        for c in self._children:
-            c.move_by(vector)
-
-    def get_active_block_ids(self):
-        res = []
-        for c in self._children:
-            res.extend(c.get_active_block_ids())
-        return res
-
-    def build_xml(self, xml):
-        pass
-
-    def get_name(self):
-        for c in self._children:
-            name = c.get_name()
-            if name:
-                return name
-        return ""
-
-
-class Grid(Structure):
-    @property
-    def blocks(self):
+    def get_children(self):
         return self._children
 
     def build_xml(self, xml):
-        sub = ETree.SubElement(xml, "Grid", self.get_attribs())
+        sub = ETree.SubElement(xml, self.type, self.get_attribs())
         for c in self._children:
             c.build_xml(sub)
 
-    def is_grounded(self):
+    def get_expected_children_types(self):
+        return []
+
+
+class MachineNode(XmlNode):
+    def get_active_block_ids(self):
+        res = []
         for c in self._children:
-            if c.is_grounded():
-                return True
+            try:
+                res.extend(c.get_active_block_ids())
+            except AttributeError:
+                pass  # Class doesn't have active blocks
+        return res
+
+    def is_grounded(self):
+        for c in self.get_children():
+            try:
+                if c.is_grounded():
+                    return True
+            except AttributeError:
+                pass
         return False
 
+    def has_cockpit(self):
+        for x in self.get_children():
+            try:
+                if x.has_cockpit():
+                    return True
+            except AttributeError:
+                pass
+        return False
+
+    def has_generator(self):
+        for c in self.get_children():
+            try:
+                if c.has_generator():
+                    return True
+            except AttributeError:
+                pass
+        return False
+
+    def get_name(self, active_block_data):
+        for c in self.get_children():
+            try:
+                name = c.get_name(active_block_data)
+                if name != "":
+                    return name
+            except AttributeError:
+                pass
+        return ""
+
+    def get_expected_children_types(self):
+        return ['Grid']
+
+    def move_by(self, vector):
+        for c in self._children:
+            try:
+                c.move_by(vector)
+            except AttributeError:
+                pass
+
+
+class Blocks(MachineNode):
+    def get_expected_children_types(self):
+        return ['Block']
+
+
+class BasePosition(XmlNode):
+    pass
+
+
+class BaseRotation(XmlNode):
+    pass
+
+
+class BaseBounds(XmlNode):
+    pass
+
+
+class Pos(XmlNode):
+    pass
+
+
+class Rot(XmlNode):
+    pass
+
+
+class Col(XmlNode):
+    pass
+
+
+class Grid(MachineNode):
+    """Every machine has 1 Grid which contains 1 Blocks"""
     def move_by(self, vector):
         if "position" in self._attribs:
             (x, y, z) = [float(i) for i in self._attribs["position"].split(" ")]
             self._attribs["position"] = "{:0.3f} {:0.3f} {:0.3f}".format(x + vector[0], y + vector[1], z + vector[2])
         super(Grid, self).move_by(vector)
 
+    def get_expected_children_types(self):
+        return ['Blocks', 'BasePosition', 'BaseRotation', 'BaseBounds']
+
+
+class SubGrid(Grid):
+    pass
+
 
 class ActiveBlock:
     def __init__(self, xml):
         root = ETree.fromstring(xml)
-        self.name = root.attrib.get("blockName", "")
+        self.name = root.attrib.get("Name", "")
 
     def get_name(self):
         return self.name
 
 
-class Block(Structure):
+class Block(MachineNode):
     types = {
         1: "Full Armor Block",
+        2: "Corner Armor Block",
+        3: "Compact Battery Rack",
         4: "Cockpit 2x3",
+        5: "Reinforced Wall",
+        6: "Armor Corner Slope - Inverted",
+        7: "Armor Corner Slope - Long Inverted",
+        8: "Armor Corner Slope",
+        9: "Armor Slope Long",
+        10: "Armor Slope Corner (Long)",
+        11: "Armor Slope",
+        #12 active
+        13: "Conveyor L-Section",
         14: "Conveyor",
+        15: "Conveyor T-Section",
+        16: "Conveyor X-Section",
+        #17 probly active block
         18: "Wheel",
         19: "Compact Container",
+        20: "Bio Generator",
+        21: "Reinforced Wall with Light",
+        22: "Reinforced Wall - Short",
+        23: "Reinforced Wall Corner",
+        24: "Reinforced Wall Outer Corner",
+        25: "Base Foundation (double height)",
         26: "Raised Floor",
+        #27
+        28: "Compact Medbay",
+        29: "Medium Refinery",
+        #30
+        #31
         32: "Reinforced Wall with Door",
+        33: "Ceiling Panel",
         34: "Suspension",
-        36: "Jack",
+        #35 probly active
+        36: "Jack tool",
+
+        38: "Railing",
+        39: "Short Railing",
+        40: "Stairs",
+        41: "Beacon",
         42: "Uranium Generator",
         43: "Ceiling Light",
+        44: "Indoor Light",
+        45: "Search Light - Front Mount",
+        46: "Search Light - Top Mount",
+        47: "Large Container",
+        48: "Fence",
+        49: "Fence Corner",
+        50: "Ramp",
+        51: "Inner Wall with Doors",
+        52: "Reinforced Wall Exterior/Interior Joint",
         53: "Short inner wall",
+        54: "Inner Wall",
+        55: "Windowed Outer Wall",
         56: "Solar Beacon",
         57: "Escape pod",
+
         61: "Base Foundation",
+
         64: "Emergency 3D printer",
+
         66: "Hinge",
+        68: "Rotating Plate",
+        71: "Item Dispenser",
         73: "Mining Machine",
+        76: "Medium Armory",
+        78: "Medium Medbay",
+        79: "Escape Pod (broken)",  # 3k health
+        80: "Radar",  # 300 health
+        81: "Winch",
+        82: "Winch Shackle",
+        83: "Thruster",  # 300 health
+        84: "Tank",  # 250 health
+        85: "Big Tank",  # 750 health
+        86: "Sloped Arc Corner",
+        87: "Corner Arc",
+        88: "Arc Block",
+        #89
+        90: "Wreck Container",
+        91: "Wreck Beacon",
+        92: "Cockpit 3x3",
+        93: "Rounded Cockpit 2x3",
+        94: "Buggy Wheel",
+        95: "Mobile Bas Wheel",
+        96: "Large Suspension",
+        97: "Rounded Cockpit 3x3",
+        100: "Hover Pad",
+        101: "Floating Foundation",
     }
 
     def randomize_color(self):
@@ -544,26 +735,40 @@ class Block(Structure):
         self._attribs["b"] = random.randrange(0, 255)
 
     def is_grounded(self):
-        return "grounded" in self._attribs and self._attribs["grounded"] == "True"
+        return "Ground" in self._attribs and self._attribs["Ground"] == "true"
 
     def get_active_block_ids(self):
         result = []
-        if "activeId" in self._attribs:
-            result.append(int(self._attribs["activeId"]))
+        if "ActiveID" in self._attribs:
+            result.append(int(self._attribs["ActiveID"]))
         result.extend(super(Block, self).get_active_block_ids())
         return result
 
-    def build_xml(self, xml):
-        sub = ETree.SubElement(xml, "Block", self.get_attribs())
-        for c in self._children:
-            c.build_xml(sub)
+    def get_name(self, active_block_data):
+        if "ActiveID" in self._attribs:
+            aid = int(self._attribs["ActiveID"])
+            if aid == 0:
+                pass
+            elif aid in active_block_data:
+                active_block_data = active_block_data[aid]
+                active_block = ActiveBlock(active_block_data["data"])
+                name = active_block.get_name()
+                if name:
+                    return name
+            else:
+                # Avoid crash if active block did not load. Why is it missing though?
+                print("Active block %i not found" % aid)
+        return super().get_name(active_block_data)
 
-    def get_name(self):
-        if "activeId" in self._attribs:
-            id = int(self._attribs["activeId"])
-            active_block_data = self.machine.active_block_data[id]
-            active_block = ActiveBlock(active_block_data["data"])
-            name = active_block.get_name()
-            if name:
-                return name
-        return super(Block, self).get_name()
+    def has_cockpit(self):
+        if self._attribs["ID"] in ("4", "92", "93", "97"):
+            return True
+        return super().has_cockpit()
+
+    def has_generator(self):
+        if self._attribs["ID"] in ("20", "42"):
+            return True
+        return super().has_generator()
+
+    def get_expected_children_types(self):
+        return ['Pos', 'Col', 'Rot', 'SubGrid']

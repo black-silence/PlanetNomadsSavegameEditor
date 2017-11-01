@@ -8,6 +8,7 @@ Disclaimer:
 
 Requirements:
 - Python 3.5 or later
+- optional: numpy and matplotlib
 
 Usage:
 - run GUI.py
@@ -18,6 +19,7 @@ Usage:
 - load the game in Planet Nomads
 
 Advanced Usage:
+- Map: drag to rotate. Can be used to locate player and vehicles on the planet. Most of the construct will be crash sites.
 - GPS beacons: creates 3 beacons, one at the north pole and two on the equator. They form an equilateral triangle that could be used to check your position on the planet.
 - Machine Tools: In Planet Nomads, use the "Rename Block" feature to give a useful name to your machines. This name will show in the machine select instead of the numeric ID.
 - Cheats: you're only cheating yourself if you use this too often. 
