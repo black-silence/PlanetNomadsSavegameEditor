@@ -328,21 +328,28 @@ class GUI(Frame):
         z = self.savegame.get_planet_size() * np.outer(np.ones(np.size(u)), np.cos(v))
         ax.plot_surface(x, y, z, rcount=18, ccount=21, alpha=0.1)
 
-        colors = {"Base": "blue", "Vehicle": "orange", "Construct": "grey"}
-        markers = {"Base": "^", "Vehicle": "v", "Construct": "."}
+        try:
+            selected_machine_id = int(self.gui_selected_machine_identifier.get())
+        except ValueError:
+            selected_machine_id = 0
+
+        colors = {"Base": "blue", "Vehicle": "orange", "Construct": "grey", "Selected": "red"}
+        markers = {"Base": "^", "Vehicle": "v", "Construct": ".", "Selected": "v"}
         machines = self.savegame.machines
         coords = {}
         for m in machines:
             c = m.get_coordinates()
-            type = m.get_type()
-            if not type in coords:
-                coords[type] = {"x": [], "y": [], "z": []}
-            coords[type]["x"].append(c[0])
-            coords[type]["y"].append(c[2])  # Flip y/z
-            coords[type]["z"].append(c[1])
-        for type in coords:
-            ax.scatter(np.array(coords[type]["x"]), np.array(coords[type]["y"]), np.array(coords[type]["z"]),
-                   c=colors[type], marker=markers[type], label=type)
+            mtype = m.get_type()
+            if m.identifier == selected_machine_id:
+                mtype = "Selected"
+            if mtype not in coords:
+                coords[mtype] = {"x": [], "y": [], "z": []}
+            coords[mtype]["x"].append(c[0])
+            coords[mtype]["y"].append(c[2])  # Flip y/z
+            coords[mtype]["z"].append(c[1])
+        for mtype in coords:
+            ax.scatter(np.array(coords[mtype]["x"]), np.array(coords[mtype]["y"]), np.array(coords[mtype]["z"]),
+                       c=colors[mtype], marker=markers[mtype], label=mtype)
 
         player = self.savegame.get_player_position()
         ax.scatter(np.array(player[0]), np.array(player[2]), np.array(player[1]), c="red", marker="*", label="Player")

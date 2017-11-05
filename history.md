@@ -13,3 +13,6 @@ v1.0.1
 v1.0.2
 - updated to work with PN 0.7.8
 - added map drawing
+
+v1.0.3
+- map now displays the selected machine separately
