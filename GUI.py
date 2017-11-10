@@ -168,6 +168,8 @@ class GUI(Frame):
         gui_resource_menu.add_command(label="Silicium", command=lambda: self.create_item(52))
         gui_resource_menu.add_command(label="Silver", command=lambda: self.create_item(59))
         gui_resource_menu.add_command(label="Titanium", command=lambda: self.create_item(57))
+        gui_resource_menu.add_command(label="Uranium", command=lambda: self.create_item(61))
+        gui_resource_menu.add_command(label="Enriched Uranium", command=lambda: self.create_item(63))
         gui_resource_menubutton = ttk.Menubutton(gui_cheats_frame, text="Cheat: add stack of resource",
                                                  menu=gui_resource_menu)
         gui_resource_menubutton.grid(sticky=(E, W))
@@ -295,7 +297,7 @@ class GUI(Frame):
         for slot in stacks:
             print("Slot {}: {} {}".format(slot, stacks[slot].get_count(), stacks[slot].get_item_name()))
 
-    def create_item(self, item_id, amount=70):
+    def create_item(self, item_id, amount=90):
         inventory = self.savegame.get_player_inventory()
         if not inventory:
             self.update_statustext("Could not load inventory")
