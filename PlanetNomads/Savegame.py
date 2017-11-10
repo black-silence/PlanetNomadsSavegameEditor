@@ -15,6 +15,7 @@ class Savegame:
         self.dbconnector = None
         self.db = None
         self.__machines = []
+        self.settings = None
 
     def __del__(self):
         self.db.close()
@@ -64,6 +65,19 @@ class Savegame:
             return [float(x) for x in line.split(" ")[:3]]
         raise IOError("Player data not found in simple_storage")
 
+    def get_setting(self, name):
+        if not self.settings:
+            self.db.execute("select value from simple_storage where key='advanced_settings'")
+            try:
+                self.settings = ETree.fromstring(self.db.fetchone()["value"])
+            except TypeError:
+                # Old games don't have advanced settings in simple storage
+                return None
+        for tag in self.settings:
+            if tag.tag == name:
+                return tag.text
+        return None
+
     @property
     def machines(self):
         if not self.__machines:
@@ -101,7 +115,11 @@ class Savegame:
         print("Number of machines: {}".format(len(self.machines)))
 
     def get_planet_size(self):
-        return 10000  # TODO detect planet size
+        radius = self.get_setting("PlanetRadius")
+        if radius:
+            return int(radius)
+        # Old games had 10k, even older games may have 16k. Not important enough to calculate it.
+        return 10000
 
     def get_player_inventory(self):
         inventory = Container(self.db, self.dbconnector)

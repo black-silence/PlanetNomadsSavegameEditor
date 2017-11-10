@@ -16,3 +16,6 @@ v1.0.2
 
 v1.0.3
 - map now displays the selected machine separately
+
+v1.0.4
+- read planet size from game settings
