@@ -98,8 +98,13 @@ class Savegame:
             if not m.is_changed():
                 continue
             data = '<?xml version="1.0" encoding="utf-8"?>' + m.get_xml_string()
-            insert = (data, m.transform, m.identifier)
-            self.db.execute("update machine set data = ?, transform = ? where id = ?", insert)
+            update = (data, m.transform, m.identifier)
+            self.db.execute("update machine set data = ?, transform = ? where id = ?", update)
+            # write changed active blocks too, required for pushing stuff around
+            active_blocks = m.get_changed_active_blocks()
+            for b in active_blocks:
+                update = (active_blocks[b].get_xml_string(), b)
+                self.db.execute("update active_blocks set data = ? where id = ?", update)
         self.dbconnector.commit()
 
     def unlock_recipes(self):
@@ -418,7 +423,7 @@ class Machine:
         for row in data:
             if row["id"] not in self.active_block_ids:
                 continue
-            self.active_block_data[row["id"]] = row
+            self.active_block_data[row["id"]] = ActiveBlock(row["data"])
 
     def randomize_color(self):
         for g in self.grid:
@@ -428,13 +433,21 @@ class Machine:
 
     def get_xml_string(self):
         """Save the current machine, replaces original xml"""
-        xml = ETree.Element("Machine")
+        xml = ETree.Element("MachineSaveData")
         for g in self.grid:
             g.build_xml(xml)
         return ETree.tostring(xml, "unicode")
 
     def is_changed(self):
         return self.changed
+
+    def get_changed_active_blocks(self):
+        result = {}
+        for aid in self.active_block_data:
+            active_block = self.active_block_data[aid]
+            if active_block.changed:
+                result[aid] = active_block
+        return result
 
     def __str__(self):
         grounded = self.is_grounded()
@@ -460,11 +473,10 @@ class Machine:
         y2 = y * factor
         z2 = z * factor
         self.transform = "{:0.3f} {:0.3f} {:0.3f} {} {} {}".format(x2, y2, z2, rotX, rotY, rotZ)
-        # Use the exact difference to move subgrids
-        # Looks like active_blocks does not have to be adjusted
+        # Use the exact difference to move subgrids, this is important or the object will disappear
         difference = (x2 - x, y2 - y, z2 - z)
         for g in self.grid:
-            g.move_by(difference)
+            g.move_by(difference, self.active_block_data)
         self.changed = True
 
     def get_coordinates(self):
@@ -592,10 +604,10 @@ class MachineNode(XmlNode):
     def get_expected_children_types(self):
         return ['Grid']
 
-    def move_by(self, vector):
+    def move_by(self, vector, active_block_data):
         for c in self._children:
             try:
-                c.move_by(vector)
+                c.move_by(vector, active_block_data)
             except AttributeError:
                 pass
 
@@ -606,7 +618,13 @@ class Blocks(MachineNode):
 
 
 class BasePosition(XmlNode):
-    pass
+    def move_by(self, vector, active_blocks):
+        x = float(self._attribs["X"])
+        y = float(self._attribs["Y"])
+        z = float(self._attribs["Z"])
+        self._attribs["X"] = "{:0.5f}".format(x + vector[0])
+        self._attribs["Y"] = "{:0.5f}".format(y + vector[1])
+        self._attribs["Z"] = "{:0.5f}".format(z + vector[2])
 
 
 class BaseRotation(XmlNode):
@@ -614,7 +632,19 @@ class BaseRotation(XmlNode):
 
 
 class BaseBounds(XmlNode):
-    pass
+    def move_by(self, vector, active_blocks):
+        x = float(self._attribs["MinX"])
+        y = float(self._attribs["MinY"])
+        z = float(self._attribs["MinZ"])
+        self._attribs["MinX"] = "{:0.5f}".format(x + vector[0])
+        self._attribs["MinY"] = "{:0.5f}".format(y + vector[1])
+        self._attribs["MinZ"] = "{:0.5f}".format(z + vector[2])
+        x = float(self._attribs["MaxX"])
+        y = float(self._attribs["MaxY"])
+        z = float(self._attribs["MaxZ"])
+        self._attribs["MaxX"] = "{:0.5f}".format(x + vector[0])
+        self._attribs["MaxY"] = "{:0.5f}".format(y + vector[1])
+        self._attribs["MaxZ"] = "{:0.5f}".format(z + vector[2])
 
 
 class Pos(XmlNode):
@@ -631,12 +661,6 @@ class Col(XmlNode):
 
 class Grid(MachineNode):
     """Every machine has 1 Grid which contains 1 Blocks"""
-    def move_by(self, vector):
-        if "position" in self._attribs:
-            (x, y, z) = [float(i) for i in self._attribs["position"].split(" ")]
-            self._attribs["position"] = "{:0.3f} {:0.3f} {:0.3f}".format(x + vector[0], y + vector[1], z + vector[2])
-        super(Grid, self).move_by(vector)
-
     def get_expected_children_types(self):
         return ['Blocks', 'BasePosition', 'BaseRotation', 'BaseBounds']
 
@@ -647,11 +671,26 @@ class SubGrid(Grid):
 
 class ActiveBlock:
     def __init__(self, xml):
-        root = ETree.fromstring(xml)
-        self.name = root.attrib.get("Name", "")
+        self.root = ETree.fromstring(xml)
+        self.name = self.root.attrib.get("Name", "")
+        self.changed = False
+
+    def get_xml_string(self):
+        return ETree.tostring(self.root, "unicode")
 
     def get_name(self):
         return self.name
+
+    def move_by(self, vector):
+        for node in self.root:
+            if node.tag != "Module":
+                continue
+            if node.attrib["Type"] != "PositionModule":
+                continue
+            position = node[0][0].text
+            x, y, z = [float(i) for i in position.split(";")]
+            node[0][0].text = "{:0.3f};{:0.3f};{:0.3f}".format(x + vector[0], y + vector[1], z + vector[2])
+            self.changed = True
 
 
 class Block(MachineNode):
@@ -755,28 +794,38 @@ class Block(MachineNode):
     def is_grounded(self):
         return "Ground" in self._attribs and self._attribs["Ground"] == "true"
 
+    def get_active_block_id(self):
+        if "ActiveID" in self._attribs:
+            return int(self._attribs["ActiveID"])
+        return None
+
     def get_active_block_ids(self):
         result = []
-        if "ActiveID" in self._attribs:
-            result.append(int(self._attribs["ActiveID"]))
+        active_id = self.get_active_block_id()
+        if active_id:
+            result.append(active_id)
         result.extend(super(Block, self).get_active_block_ids())
         return result
 
-    def get_name(self, active_block_data):
-        if "ActiveID" in self._attribs:
-            aid = int(self._attribs["ActiveID"])
+    def get_active_block(self, active_blocks):
+        aid = self.get_active_block_id()
+        if aid:
             if aid == 0:
                 pass
-            elif aid in active_block_data:
-                active_block_data = active_block_data[aid]
-                active_block = ActiveBlock(active_block_data["data"])
-                name = active_block.get_name()
-                if name:
-                    return name
+            elif aid in active_blocks:
+                return active_blocks[aid]
             else:
                 # Avoid crash if active block did not load. Why is it missing though?
                 print("Active block %i not found" % aid)
-        return super().get_name(active_block_data)
+        return None
+
+    def get_name(self, active_blocks):
+        active_block = self.get_active_block(active_blocks)
+        if active_block:
+            name = active_block.get_name()
+            if name:
+                return name
+        return super().get_name(active_blocks)
 
     def has_cockpit(self):
         if self._attribs["ID"] in ("4", "92", "93", "97"):
@@ -790,3 +839,10 @@ class Block(MachineNode):
 
     def get_expected_children_types(self):
         return ['Pos', 'Col', 'Rot', 'SubGrid']
+
+    def move_by(self, vector, active_blocks):
+        super().move_by(vector, active_blocks)
+        active_block = self.get_active_block(active_blocks)
+        if not active_block:
+            return
+        active_block.move_by(vector)

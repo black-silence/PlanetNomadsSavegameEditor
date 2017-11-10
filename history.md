@@ -19,3 +19,4 @@ v1.0.3
 
 v1.0.4
 - read planet size from game settings
+- pushing machines updated to work with PN 0.7.10
