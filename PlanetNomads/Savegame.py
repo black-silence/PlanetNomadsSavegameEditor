@@ -462,22 +462,29 @@ class Machine:
                 return True
         return False
 
-    def push_up(self, distance: int):
-        """Push machine away from the planet center."""
-        (x, y, z, rotX, rotY, rotZ) = [x for x in self.transform.split(" ")]
-
+    def teleport(self, distance: int, target):
+        """Teleport machine over/under the target."""
+        rot_x, rot_y, rot_z = self.get_rotation()
         (x, y, z) = self.get_coordinates()
-        distance_to_planet_center = sqrt(x ** 2 + y ** 2 + z ** 2)
+
+        (target_x, target_y, target_z) = target.get_coordinates()
+        distance_to_planet_center = sqrt(target_x ** 2 + target_y ** 2 + target_z ** 2)
         factor = 1 + distance / distance_to_planet_center
-        x2 = x * factor  # TODO use np
-        y2 = y * factor
-        z2 = z * factor
-        self.transform = "{:0.3f} {:0.3f} {:0.3f} {} {} {}".format(x2, y2, z2, rotX, rotY, rotZ)
+        target_x2 = target_x * factor  # TODO use np
+        target_y2 = target_y * factor
+        target_z2 = target_z * factor
+
+        self.transform = "{:0.3f} {:0.3f} {:0.3f} {} {} {}".format(target_x2, target_y2, target_z2, rot_x, rot_y, rot_z)
         # Use the exact difference to move subgrids, this is important or the object will disappear
-        difference = (x2 - x, y2 - y, z2 - z)
+        difference = (target_x2 - x, target_y2 - y, target_z2 - z)
         for g in self.grid:
             g.move_by(difference, self.active_block_data)
         self.changed = True
+
+    def get_rotation(self):
+        """Get rotation as tuple of string"""
+        (x, y, z, rotX, rotY, rotZ) = [x for x in self.transform.split(" ")]
+        return rotX, rotY, rotZ
 
     def get_coordinates(self):
         """Get coords as tuple of x, y, z"""
@@ -586,6 +593,15 @@ class MachineNode(XmlNode):
         for c in self.get_children():
             try:
                 if c.has_generator():
+                    return True
+            except AttributeError:
+                pass
+        return False
+
+    def has_hoverjack(self):
+        for c in self.get_children():
+            try:
+                if c.has_hoverjack():
                     return True
             except AttributeError:
                 pass
@@ -731,7 +747,7 @@ class Block(MachineNode):
         34: "Suspension",
         #35 probly active
         36: "Jack tool",
-
+        37: "Hover Jack",
         38: "Railing",
         39: "Short Railing",
         40: "Stairs",
@@ -820,7 +836,7 @@ class Block(MachineNode):
         return None
 
     def get_name(self, active_blocks):
-        active_block = self.get_active_block(active_blocks)
+        active_block = self.get_active_block(active_blocks) # type: ActiveBlock
         if active_block:
             name = active_block.get_name()
             if name:
@@ -836,6 +852,11 @@ class Block(MachineNode):
         if self._attribs["ID"] in ("20", "42"):
             return True
         return super().has_generator()
+
+    def has_hoverjack(self):
+        if self._attribs["ID"] == "37":
+            return True
+        return super().has_hoverjack()
 
     def get_expected_children_types(self):
         return ['Pos', 'Col', 'Rot', 'SubGrid']

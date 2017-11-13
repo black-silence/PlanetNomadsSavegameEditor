@@ -20,3 +20,8 @@ v1.0.3
 v1.0.4
 - read planet size from game settings
 - pushing machines updated to work with PN 0.7.10
+
+v1.1.0: Teleport extreme
+- Named machines are now displayed in the machine select even if they are not vehicles (cockpit) or bases (generator)
+- Teleport distance can be customized
+- Teleport target location can be selected

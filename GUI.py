@@ -6,6 +6,7 @@ from tkinter.scrolledtext import ScrolledText
 from typing import Text
 import shutil
 import os
+import _tkinter
 from PlanetNomads import Savegame
 import platform
 
@@ -81,9 +82,32 @@ class GUI(Frame):
         self.gui_machine_select.grid(sticky=(E, W))
         self.locked_buttons.append(self.gui_machine_select)
 
-        gui_push_machine_button = ttk.Button(frame, text="Push selected machine up by 20 meters",
-                                             command=self.push_machine_up)
+        teleport_tools = ttk.Frame(frame)
+        teleport_tools.grid(sticky=(N, E, S, W))
+
+        gui_push_machine_button = ttk.Button(teleport_tools, text="Teleport selected machine",
+                                             command=self.teleport_machine)
         gui_push_machine_button.grid(sticky=(E, W))
+
+        label = ttk.Label(teleport_tools, text=" to ")
+        label.grid(row=0, column=1)
+
+        self.gui_teleport_distance = IntVar(self.parent)
+        self.gui_teleport_distance.set(20)
+        self.gui_teleport_distance_button = ttk.Entry(teleport_tools, textvariable=self.gui_teleport_distance,
+                                                      justify="center", width=5)
+        self.gui_teleport_distance_button.grid(row=0, column=2)
+
+        label = ttk.Label(teleport_tools, text=" meters over ")
+        label.grid(row=0, column=3)
+
+        options = ["current position"]
+        self.gui_teleport_machine_target = StringVar(self.parent)
+        self.gui_teleport_machine_target.set(options[0])
+        self.gui_teleport_target_button = ttk.OptionMenu(teleport_tools, self.gui_teleport_machine_target, *options)
+        self.gui_teleport_target_button.grid(row=0, column=4, sticky=(E, W))
+        self.locked_buttons.append(self.gui_teleport_target_button)
+
         self.locked_buttons.append(gui_push_machine_button)
 
         return frame
@@ -93,12 +117,22 @@ class GUI(Frame):
         menu.delete(0, "end")
         menu.add_command(label="Select machine")
 
+        target = self.gui_teleport_target_button["menu"]
+        target.delete(0, "end")
+        target.add_command(label="current position")
+
         for m in machines:
-            if m.get_type() == "Construct":
+            type = m.get_type()
+            name_id = m.get_name_or_id()
+            if type == "Construct" and m.get_name() == "":
                 continue  # 300+ wrecks are just too much
-            menu.add_command(label="{} {}".format(m.get_type(), m.get_name_or_id()),
+
+            menu.add_command(label="{} {}".format(type, name_id),
                              command=lambda value=m.identifier: self.gui_selected_machine_identifier.set(value))
+            target.add_command(label="{} {}".format(type, name_id),
+                             command=lambda value=m.identifier: self.gui_teleport_machine_target.set(value))
         self.gui_selected_machine_identifier.set("Select machine")
+        self.gui_teleport_machine_target.set("current position")
 
     def init_dev_buttons(self, gui_main_frame):
         gui_dev_tools_frame = ttk.Frame(gui_main_frame)
@@ -144,18 +178,43 @@ class GUI(Frame):
         self.locked_buttons.append(gui_southbeacon_button)
         return gui_basic_tools_frame
 
-    def push_machine_up(self):
+    def teleport_machine(self):
         machine_id = self.gui_selected_machine_identifier.get()
         if machine_id == "Select machine":
             self.update_statustext("Select a machine first")
             return
         machine_id = int(machine_id)
+        target = self.gui_teleport_machine_target.get()
+        if target == "current position":
+            target_id = None
+        else:
+            target_id = int(target)
+
+        try:
+            distance = self.gui_teleport_distance.get()
+        except _tkinter.TclError:
+            self.update_statustext("Please use only numbers in the teleport distance")
+            return
+
+        target_machine = None
+        active_machine = None
         for machine in self.savegame.machines:
-            if machine.identifier != machine_id:
-                continue
-            machine.push_up(20)
-            self.update_statustext("Machine {} pushed".format(machine.get_name_or_id()))
-            self.savegame.save()
+            if machine.identifier == machine_id:
+                active_machine = machine
+                if not target_id:
+                    target_machine = machine  # Relative to its current position
+                if target_machine:
+                    break  # We found both or do not need a target
+            if machine.identifier == target_id:
+                target_machine = machine
+                if active_machine:
+                    break  # We found both
+        if not active_machine:
+            self.update_statustext("Something broke, did not find machine")
+            return
+        active_machine.teleport(distance, target_machine)
+        self.update_statustext("Machine {} teleported".format(active_machine.get_name_or_id()))
+        self.savegame.save()
 
     def init_cheat_buttons(self, gui_main_frame):
         gui_cheats_frame = ttk.Frame(gui_main_frame)
