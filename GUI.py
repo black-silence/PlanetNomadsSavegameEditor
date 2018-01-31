@@ -74,11 +74,11 @@ class GUI(Frame):
     def init_machine_buttons(self, gui_main_frame):
         frame = ttk.Frame(gui_main_frame)
 
-        options = ["Select machine"]
+        self.machine_select_options = ["Select machine"]
         self.gui_selected_machine_identifier = StringVar(self.parent)
-        self.gui_selected_machine_identifier.set(options[0])
+        self.gui_selected_machine_identifier.set(self.machine_select_options[0])
 
-        self.gui_machine_select = ttk.OptionMenu(frame, self.gui_selected_machine_identifier, *options)
+        self.gui_machine_select = ttk.Combobox(frame, textvariable=self.gui_selected_machine_identifier, values=self.machine_select_options, state='readonly')
         self.gui_machine_select.grid(sticky=(E, W))
         self.locked_buttons.append(self.gui_machine_select)
 
@@ -113,24 +113,23 @@ class GUI(Frame):
         return frame
 
     def update_machine_select(self, machines):
-        menu = self.gui_machine_select["menu"]
-        menu.delete(0, "end")
-        menu.add_command(label="Select machine")
-
+        self.machine_select_options = ["Select machine"]
         target = self.gui_teleport_target_button["menu"]
         target.delete(0, "end")
         target.add_command(label="current position")
+        machine_list = []
 
         for m in machines:
             type = m.get_type()
             name_id = m.get_name_or_id()
             if type == "Construct" and m.get_name() == "":
                 continue  # 300+ wrecks are just too much
-
-            menu.add_command(label="{} {}".format(type, name_id),
-                             command=lambda value=m.identifier: self.gui_selected_machine_identifier.set(value))
+            machine_list.append("{} {} [{}]".format(type, name_id, m.identifier))
             target.add_command(label="{} {}".format(type, name_id),
-                             command=lambda value=m.identifier: self.gui_teleport_machine_target.set(value))
+                               command=lambda value=m.identifier: self.gui_teleport_machine_target.set(value))
+        machine_list.sort()
+        self.machine_select_options.extend(machine_list)
+        self.gui_machine_select["values"] = self.machine_select_options
         self.gui_selected_machine_identifier.set("Select machine")
         self.gui_teleport_machine_target.set("current position")
 

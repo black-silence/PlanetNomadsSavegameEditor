@@ -795,11 +795,13 @@ class Block(MachineNode):
         92: "Cockpit 3x3",
         93: "Rounded Cockpit 2x3",
         94: "Buggy Wheel",
-        95: "Mobile Bas Wheel",
+        95: "Mobile Base Wheel",
         96: "Large Suspension",
         97: "Rounded Cockpit 3x3",
+        98: "Switchboard",
         100: "Hover Pad",
         101: "Floating Foundation",
+        114: "Air Blade",
     }
 
     def randomize_color(self):
