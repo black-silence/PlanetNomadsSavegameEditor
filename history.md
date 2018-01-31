@@ -25,3 +25,7 @@ v1.1.0: Teleport extreme
 - Named machines are now displayed in the machine select even if they are not vehicles (cockpit) or bases (generator)
 - Teleport distance can be customized
 - Teleport target location can be selected
+
+v1.2.0: Colorful
+- Recolor your constructions easily
+- Better machine select

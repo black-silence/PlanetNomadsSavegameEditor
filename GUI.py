@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 from tkinter import *
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, colorchooser
 from tkinter.scrolledtext import ScrolledText
 from typing import Text
 import shutil
@@ -17,10 +17,6 @@ try:
     enable_map = True
 except ImportError:
     enable_map = False
-
-"""
-TODO
-"""
 
 
 class GUI(Frame):
@@ -82,12 +78,14 @@ class GUI(Frame):
         self.gui_machine_select.grid(sticky=(E, W))
         self.locked_buttons.append(self.gui_machine_select)
 
+        # Teleport area
         teleport_tools = ttk.Frame(frame)
         teleport_tools.grid(sticky=(N, E, S, W))
 
         gui_push_machine_button = ttk.Button(teleport_tools, text="Teleport selected machine",
                                              command=self.teleport_machine)
         gui_push_machine_button.grid(sticky=(E, W))
+        self.locked_buttons.append(gui_push_machine_button)
 
         label = ttk.Label(teleport_tools, text=" to ")
         label.grid(row=0, column=1)
@@ -108,7 +106,18 @@ class GUI(Frame):
         self.gui_teleport_target_button.grid(row=0, column=4, sticky=(E, W))
         self.locked_buttons.append(self.gui_teleport_target_button)
 
-        self.locked_buttons.append(gui_push_machine_button)
+        # Recolor area
+        color_grid = ttk.Frame(frame)
+        color_grid.grid(sticky=(N, E, S, W))
+        gui_randomize_color = ttk.Button(color_grid, text="Randomize colors", command=self.randomize_machine_color)
+        gui_randomize_color.grid(row=0, column=2, sticky=(E, W))
+        self.locked_buttons.append(gui_randomize_color)
+        gui_change_color = ttk.Button(color_grid, text="Paint all blocks", command=self.change_machine_color)
+        gui_change_color.grid(row=0, sticky=(E, W))
+        self.locked_buttons.append(gui_change_color)
+        gui_change_color = ttk.Button(color_grid, text="Paint grey blocks", command=self.replace_machine_color)
+        gui_change_color.grid(row=0, column=1, sticky=(E, W))
+        self.locked_buttons.append(gui_change_color)
 
         return frame
 
@@ -177,12 +186,27 @@ class GUI(Frame):
         self.locked_buttons.append(gui_southbeacon_button)
         return gui_basic_tools_frame
 
-    def teleport_machine(self):
+    def get_selected_machine_id(self):
+        """Return selected machine id or print status message"""
         machine_id = self.gui_selected_machine_identifier.get()
         if machine_id == "Select machine":
             self.update_statustext("Select a machine first")
             return
-        machine_id = int(machine_id)
+        x = re.search(r'\[(\d+)]$', machine_id)
+        return int(x.group(1))
+
+    def get_selected_machine(self):
+        machine_id = self.get_selected_machine_id()
+        if not machine_id:
+            return
+        for machine in self.savegame.machines:
+            if machine.identifier == machine_id:
+                return machine
+
+    def teleport_machine(self):
+        machine_id = self.get_selected_machine_id()
+        if not machine_id:
+            return
         target = self.gui_teleport_machine_target.get()
         if target == "current position":
             target_id = None
@@ -417,6 +441,37 @@ class GUI(Frame):
         ax.grid(False)  # Hide grid lines
         ax.legend()
         plt.show()
+
+    def randomize_machine_color(self):
+        machine = self.get_selected_machine()
+        if not machine:
+            return
+        machine.randomize_color()
+        self.update_statustext("Machine {} color changed".format(machine.get_name_or_id()))
+        self.savegame.save()
+
+    def change_machine_color(self):
+        machine = self.get_selected_machine()
+        if not machine:
+            return
+        col = colorchooser.askcolor()
+        if not col[0]:
+            return
+        machine.set_color(col[0])
+        self.update_statustext("Machine {} color changed".format(machine.get_name_or_id()))
+        self.savegame.save()
+
+    def replace_machine_color(self):
+        machine = self.get_selected_machine()
+        if not machine:
+            return
+        col = colorchooser.askcolor()
+        if not col[0]:
+            return
+        # Default color is (180, 180, 180), left upper in PN color chooser
+        machine.set_color(col[0], (180, 180, 180))
+        self.update_statustext("Machine {} color changed".format(machine.get_name_or_id()))
+        self.savegame.save()
 
 
 if __name__ == "__main__":

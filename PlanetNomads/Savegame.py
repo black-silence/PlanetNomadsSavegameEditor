@@ -61,7 +61,6 @@ class Savegame:
         for key, line in enumerate(lines):
             if line.startswith("PL"):
                 continue
-            current_position = line.split(" ")
             return [float(x) for x in line.split(" ")[:3]]
         raise IOError("Player data not found in simple_storage")
 
@@ -426,9 +425,13 @@ class Machine:
             self.active_block_data[row["id"]] = ActiveBlock(row["data"])
 
     def randomize_color(self):
-        for g in self.grid:
-            for b in g.blocks:
-                b.randomize_color()
+        for g in self.grids:
+            g.randomize_color()
+        self.changed = True
+
+    def set_color(self, color, replace=None):
+        for g in self.grids:
+            g.set_color(color, replace)
         self.changed = True
 
     def get_xml_string(self):
@@ -627,6 +630,20 @@ class MachineNode(XmlNode):
             except AttributeError:
                 pass
 
+    def randomize_color(self):
+        for c in self._children:
+            try:
+                c.randomize_color()
+            except AttributeError:
+                pass
+
+    def set_color(self, color, replace):
+        for c in self._children:
+            try:
+                c.set_color(color, replace)
+            except AttributeError:
+                pass
+
 
 class Blocks(MachineNode):
     def get_expected_children_types(self):
@@ -672,7 +689,22 @@ class Rot(XmlNode):
 
 
 class Col(XmlNode):
-    pass
+    def randomize_color(self):
+        self._attribs["r"] = str(random.randrange(0, 255))
+        self._attribs["g"] = str(random.randrange(0, 255))
+        self._attribs["b"] = str(random.randrange(0, 255))
+
+    def set_color(self, color, replace):
+        if replace:
+            if int(self._attribs["r"]) != replace[0]:
+                return
+            if int(self._attribs["g"]) != replace[1]:
+                return
+            if int(self._attribs["b"]) != replace[2]:
+                return
+        self._attribs["r"] = str(int(color[0]))
+        self._attribs["g"] = str(int(color[1]))
+        self._attribs["b"] = str(int(color[2]))
 
 
 class Grid(MachineNode):
@@ -803,11 +835,6 @@ class Block(MachineNode):
         101: "Floating Foundation",
         114: "Air Blade",
     }
-
-    def randomize_color(self):
-        self._attribs["r"] = random.randrange(0, 255)
-        self._attribs["g"] = random.randrange(0, 255)
-        self._attribs["b"] = random.randrange(0, 255)
 
     def is_grounded(self):
         return "Ground" in self._attribs and self._attribs["Ground"] == "true"
