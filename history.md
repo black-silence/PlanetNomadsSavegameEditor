@@ -29,3 +29,7 @@ v1.1.0: Teleport extreme
 v1.2.0: Colorful
 - Recolor your constructions easily
 - Better machine select
+
+v1.3.0: Share
+- Export saved games to a file. The file is bzip2 compressed if possible.
+- Import saved games from a file

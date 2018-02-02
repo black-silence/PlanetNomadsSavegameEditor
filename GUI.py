@@ -9,11 +9,17 @@ import os
 import _tkinter
 from PlanetNomads import Savegame
 import platform
+import zipfile
+import sqlite3
+import json
+
+version = '1.3.0'
 
 try:
     from mpl_toolkits.mplot3d import Axes3D  # Required for projection='3d'
     import matplotlib.pyplot as plt
     import numpy as np
+
     enable_map = True
 except ImportError:
     enable_map = False
@@ -27,7 +33,7 @@ class GUI(Frame):
     def __init__(self, parent):
         Frame.__init__(self, parent)
         self.parent = parent
-        parent.title("Planet Nomads Savegame Editor 1.0.1")
+        parent.title("Planet Nomads Savegame Editor %s" % version)
 
         # Toolbar
         gui_toolbar_frame = ttk.Frame(parent, padding="5 5 5 5")
@@ -42,6 +48,13 @@ class GUI(Frame):
         self.gui_restore_button = ttk.Button(gui_toolbar_frame, text="Restore backup", command=self.restore_backup)
         self.gui_restore_button.grid(row=0, column=2, sticky=(E, W))
         self.gui_restore_button.state(["disabled"])  # Restore button is unlocked separately
+
+        gui_export_save_button = ttk.Button(gui_toolbar_frame, text="Export file", command=self.export_save)
+        gui_export_save_button.grid(row=1, column=1, sticky=(E, W))
+        self.locked_buttons.append(gui_export_save_button)
+
+        gui_import_save_button = ttk.Button(gui_toolbar_frame, text="Import file", command=self.import_save)
+        gui_import_save_button.grid(row=1, column=2, sticky=(E, W))
 
         # content
         gui_main_frame = ttk.Frame(parent, padding="5 5 5 5")
@@ -74,7 +87,8 @@ class GUI(Frame):
         self.gui_selected_machine_identifier = StringVar(self.parent)
         self.gui_selected_machine_identifier.set(self.machine_select_options[0])
 
-        self.gui_machine_select = ttk.Combobox(frame, textvariable=self.gui_selected_machine_identifier, values=self.machine_select_options, state='readonly')
+        self.gui_machine_select = ttk.Combobox(frame, textvariable=self.gui_selected_machine_identifier,
+                                               values=self.machine_select_options, state='readonly')
         self.gui_machine_select.grid(sticky=(E, W))
         self.locked_buttons.append(self.gui_machine_select)
 
@@ -472,6 +486,87 @@ class GUI(Frame):
         machine.set_color(col[0], (180, 180, 180))
         self.update_statustext("Machine {} color changed".format(machine.get_name_or_id()))
         self.savegame.save()
+
+    def export_save(self):
+        zipdir = os.path.dirname(self.current_file)
+        save_id = re.search(r"_(\d+)\.db$", self.current_file).group(1)
+
+        # Load _main.db for meta data
+        dbconnector = sqlite3.connect(os.path.join(zipdir, "_main.db"))
+        maindb = dbconnector.cursor()
+        maindb.row_factory = sqlite3.Row
+        maindb.execute("select * from saves where id = ?", (save_id,))
+        row = maindb.fetchone()
+        metadata = {}
+        for k in row.keys():
+            metadata[k] = row[k]
+        del (metadata["id"], metadata["thumbnail"])
+
+        # Generate a safe name from the saved game title
+        zipname = "{}.pnsave.zip".format(re.sub(r"[^a-zA-Z0-9._-]+", "-", metadata["name"]))
+        fullname = os.path.join(zipdir, zipname)
+
+        # Open zip file and write save and meta. Try to compress it
+        try:
+            myzip = zipfile.ZipFile(fullname, "w", zipfile.ZIP_BZIP2)
+        except RuntimeError:
+            myzip = zipfile.ZipFile(fullname, "w")
+        stripped_name = "save_00.db"
+        myzip.write(self.current_file, arcname=stripped_name)
+        myzip.writestr("meta.json", json.dumps(metadata))
+        myzip.close()
+        self.update_statustext("Exported current save to %s\n in %s" % (zipname, zipdir))
+
+    def import_save(self):
+        # Select import file
+        opts = {"filetypes": [("PN export files", "*.pnsave.zip"), ("All files", ".*")]}
+        os_name = platform.system()
+        if os_name == "Linux":
+            opts["initialdir"] = os.path.expanduser("~/.config/unity3d/Craneballs/PlanetNomads/")
+        elif os_name == "Windows":
+            opts["initialdir"] = os.path.expanduser("~\AppData\LocalLow\Craneballs\PlanetNomads")
+        # TODO mac
+        importfilename = filedialog.askopenfilename(**opts)
+        if not importfilename:
+            return
+        # See if the _main.db is in the same directory, or let user select correct directory
+        importdir = os.path.dirname(importfilename)
+        mainfile = os.path.join(importdir, "_main.db")
+        if not os.path.exists(mainfile):
+            mainfile = os.path.join(str(opts["initialdir"]), "_main.db")
+        if not os.path.exists(mainfile):
+            opts["filetypes"] = [("PN main database", "_main.db"), ("All files", ".*")]
+            mainfile = filedialog.askopenfilename(**opts)
+            if not mainfile:
+                return
+        if not os.path.exists(mainfile):
+            self.update_statustext("Can't import without _main.db")
+            return
+
+        # Load _main.db
+        dbconnector = sqlite3.connect(mainfile)
+        maindb = dbconnector.cursor()
+        maindb.execute("select max(id) from saves")
+        next_id = maindb.fetchone()[0] + 1
+
+        # Load zip
+        try:
+            with zipfile.ZipFile(importfilename) as myzip:
+                myzip.extract("save_00.db")
+                # TODO detect correct file name scheme from existing saves
+                shutil.move("save_00.db", os.path.join(os.path.dirname(mainfile), "save_%i.db" % next_id))
+                metajson = myzip.read("meta.json")
+                meta = json.loads(metajson)
+                maindb.execute(
+                    "insert into saves (type, id_master_autosave, name, created, modified, base_seed_string, "
+                    "world_name) values (:type, -1, :name, :created, :modified, :base_seed_string, :world_name)",
+                    meta)
+                dbconnector.commit()
+                self.update_statustext("Imported %s game '%s' as id %i" % (meta["type"], meta["name"], next_id))
+        except RuntimeError:
+            self.update_statustext("Could not load the exported file.\n Maybe the bzip2 extension is missing.")
+        except OSError:
+            self.update_statustext("Could not create the file")
 
 
 if __name__ == "__main__":
