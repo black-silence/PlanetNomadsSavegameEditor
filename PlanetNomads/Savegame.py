@@ -456,7 +456,7 @@ class Machine:
         grounded = self.is_grounded()
         return "Machine {} ({})".format(
             self.get_name_or_id(),
-            "Building" if grounded else "Vehicle"
+            self.get_type()
         )
 
     def is_grounded(self):
