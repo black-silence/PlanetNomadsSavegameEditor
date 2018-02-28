@@ -12,6 +12,7 @@ import platform
 import zipfile
 import sqlite3
 import json
+from math import sqrt
 
 version = '1.3.0'
 
@@ -86,6 +87,7 @@ class GUI(Frame):
         self.machine_select_options = ["Select machine"]
         self.gui_selected_machine_identifier = StringVar(self.parent)
         self.gui_selected_machine_identifier.set(self.machine_select_options[0])
+        self.gui_selected_machine_identifier.trace('w', self.on_machine_selected)
 
         self.gui_machine_select = ttk.Combobox(frame, textvariable=self.gui_selected_machine_identifier,
                                                values=self.machine_select_options, state='readonly')
@@ -200,22 +202,35 @@ class GUI(Frame):
         self.locked_buttons.append(gui_southbeacon_button)
         return gui_basic_tools_frame
 
-    def get_selected_machine_id(self):
+    def get_selected_machine_id(self, warn=True):
         """Return selected machine id or print status message"""
         machine_id = self.gui_selected_machine_identifier.get()
         if machine_id == "Select machine":
-            self.update_statustext("Select a machine first")
+            if warn:
+                self.update_statustext("Select a machine first")
             return
         x = re.search(r'\[(\d+)]$', machine_id)
         return int(x.group(1))
 
-    def get_selected_machine(self):
-        machine_id = self.get_selected_machine_id()
+    def get_selected_machine(self, warn=True):
+        machine_id = self.get_selected_machine_id(warn)
         if not machine_id:
             return
         for machine in self.savegame.machines:
             if machine.identifier == machine_id:
                 return machine
+
+    def on_machine_selected(self, *args):
+        machine = self.get_selected_machine(False)
+        if not machine:
+            return
+        machine_coords = machine.get_coordinates()
+        player_coords = self.savegame.get_player_position()
+        x = machine_coords[0] - player_coords[0]
+        y = machine_coords[1] - player_coords[1]
+        z = machine_coords[2] - player_coords[2]
+        distance = sqrt(x**2 + y**2 + z**2)
+        self.update_statustext("Selected machine %s, distance to player %.1f" % (machine.get_name_or_id(), distance))
 
     def teleport_machine(self):
         machine_id = self.get_selected_machine_id()
