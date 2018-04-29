@@ -33,3 +33,7 @@ v1.2.0: Colorful
 v1.3.0: Share
 - Export saved games to a file. The file is bzip2 compressed if possible.
 - Import saved games from a file
+
+v1.3.1
+- Added glass cockpit to vehicle detection
+- After selecting machines, show the distance to the player character to help identify what you selected

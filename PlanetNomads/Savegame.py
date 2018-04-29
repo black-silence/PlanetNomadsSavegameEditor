@@ -834,6 +834,7 @@ class Block(MachineNode):
         100: "Hover Pad",
         101: "Floating Foundation",
         114: "Air Blade",
+        126: "Glassed Cockpit 3x3",
     }
 
     def is_grounded(self):
@@ -873,7 +874,7 @@ class Block(MachineNode):
         return super().get_name(active_blocks)
 
     def has_cockpit(self):
-        if self._attribs["ID"] in ("4", "92", "93", "97"):
+        if self._attribs["ID"] in ("4", "92", "93", "97", "126"):
             return True
         return super().has_cockpit()
 
