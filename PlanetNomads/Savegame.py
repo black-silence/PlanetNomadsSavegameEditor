@@ -4,6 +4,9 @@ import sqlite3
 import xml.etree.ElementTree as ETree
 import re
 import random
+import zipfile
+import os
+import atexit
 from math import sqrt
 from collections import OrderedDict
 
@@ -11,18 +14,28 @@ from collections import OrderedDict
 class Savegame:
     def __init__(self):
         self.filename = ""
+        self.temp_extracted_file = ""
         self.loaded = False
         self.dbconnector = None
         self.db = None
         self.__machines = []
         self.settings = None
+        atexit.register(self.cleanup)
 
     def __del__(self):
-        self.db.close()
+        self.cleanup()
+
+    def cleanup(self):
+        if self.db:
+            self.db.close()
+            self.db = None
+        os.remove(self.temp_extracted_file)
 
     def load(self, filename):
         self.filename = filename
-        self.dbconnector = sqlite3.connect(filename)
+        with zipfile.ZipFile(filename, "r") as myzip:
+            self.temp_extracted_file = myzip.extract("_working.db", "PNSE_extract")
+        self.dbconnector = sqlite3.connect(self.temp_extracted_file)
         self.db = self.dbconnector.cursor()
         self.db.row_factory = sqlite3.Row
         self.loaded = True
@@ -51,7 +64,7 @@ class Savegame:
             lines[key] = " ".join(current_position)
         player_data = "\n".join(lines)
         self.db.execute("update simple_storage set value = ? where key = 'playerData'", (player_data,))
-        self.dbconnector.commit()
+        self.on_save()
         return True
 
     def get_player_position(self):
@@ -92,6 +105,10 @@ class Savegame:
         for m in self.__machines:
             m.set_active_blocks(active_block_data)
 
+    def on_save(self):
+        self.dbconnector.commit()
+        self.write_zip()
+
     def save(self):
         for m in self.__machines:
             if not m.is_changed():
@@ -104,13 +121,18 @@ class Savegame:
             for b in active_blocks:
                 update = (active_blocks[b].get_xml_string(), b)
                 self.db.execute("update active_blocks set data = ? where id = ?", update)
-        self.dbconnector.commit()
+        self.on_save()
+
+    def write_zip(self):
+        #  PN uses deflate so to be safe this is the mode we want to use
+        with zipfile.ZipFile(self.filename, "w", zipfile.ZIP_DEFLATED) as myzip:
+            myzip.write(os.path.join("PNSE_extract", "_working.db"), "_working.db")
 
     def unlock_recipes(self):
         unlock_string = "PL1\n" + "_".join([str(i) for i in range(1, 100)])
         self.db.execute("update simple_storage set value = ? where key = 'playerTechnology'", (unlock_string,))
         affected = self.db.rowcount
-        self.dbconnector.commit()
+        self.on_save()
         return affected > 0
 
     def debug(self):
@@ -126,7 +148,7 @@ class Savegame:
         return 10000
 
     def get_player_inventory(self):
-        inventory = Container(self.db, self.dbconnector)
+        inventory = Container(self.db, self.on_save)
         if not inventory.load(0):
             return
         return inventory
@@ -190,7 +212,7 @@ class Savegame:
 
         # Insert into machine_rtree seems unhealthy
 
-        self.dbconnector.commit()
+        self.on_save()
 
 
 class Container:
@@ -203,9 +225,9 @@ class Container:
     size = 0
     db_key = None
 
-    def __init__(self, db, connector):
+    def __init__(self, db, save_callback):
         self.db = db
-        self.dbconnector = connector
+        self.save_callback = save_callback
 
     def load(self, key):
         """Load container from db
@@ -228,7 +250,7 @@ class Container:
             s.append("{}:{}".format(key, self.stacks[key].get_db_string()))
         sql = "update containers set content = ? where id = ?"
         self.db.execute(sql, ("v:1," + ",".join(s) + ",", self.db_key))
-        self.dbconnector.commit()
+        self.save_callback()
         return True
 
     def get_stacks(self):
@@ -680,6 +702,10 @@ class BaseBounds(XmlNode):
         self._attribs["MaxZ"] = "{:0.5f}".format(z + vector[2])
 
 
+class DistancePhysicsFreezeData(XmlNode):
+    pass
+
+
 class Pos(XmlNode):
     pass
 
@@ -710,7 +736,7 @@ class Col(XmlNode):
 class Grid(MachineNode):
     """Every machine has 1 Grid which contains 1 Blocks"""
     def get_expected_children_types(self):
-        return ['Blocks', 'BasePosition', 'BaseRotation', 'BaseBounds']
+        return ['Blocks', 'BasePosition', 'BaseRotation', 'BaseBounds', 'DistancePhysicsFreezeData']
 
 
 class SubGrid(Grid):

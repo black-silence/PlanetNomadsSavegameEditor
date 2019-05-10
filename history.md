@@ -37,3 +37,6 @@ v1.3.0: Share
 v1.3.1
 - Added glass cockpit to vehicle detection
 - After selecting machines, show the distance to the player character to help identify what you selected
+
+v1.4.0
+- Updated load/save to work with zipfiles created by PN 1.0.0
